@@ -1,0 +1,55 @@
+import dash
+from dash import dcc, html
+import dash.dependencies as dd
+import pandas as pd
+import plotly.express as px
+import webbrowser
+
+# Open the browser automatically
+webbrowser.open("http://127.0.0.1:8050/")
+
+# Load the CSV file with correct path formatting
+df = pd.read_csv(r"D:\chitkara\Programingcodes\sit225\new1.py\gyroscope_data.csv")
+
+# Convert timestamp column properly
+df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='coerce')
+
+# Initialize Dash app
+app = dash.Dash(__name__)
+
+# Layout of the dashboard
+app.layout = html.Div([
+    html.H1("Gyroscope Data Dashboard", style={'textAlign': 'center', 'fontWeight': 'bold'}),
+
+    html.Label("Select Variables:"),
+    dcc.Checklist(
+        id="axis-selector",
+        options=[
+            {"label": "X-Axis", "value": "x"},
+            {"label": "Y-Axis", "value": "y"},
+            {"label": "Z-Axis", "value": "z"}
+        ],
+        value=["x", "y", "z"],
+        inline=True
+    ),
+
+    dcc.Graph(id="gyroscope-graph")
+])
+
+# Callback to update the graph
+@app.callback(
+    dd.Output("gyroscope-graph", "figure"),
+    [dd.Input("axis-selector", "value")]
+)
+def update_graph(selected_axes):
+    if not selected_axes:
+        return px.line(title="Select at least one variable to display.")
+
+    fig = px.line(df, x="timestamp", y=selected_axes, title="Gyroscope Data Over Time")
+    fig.update_layout(xaxis_title="Timestamp", yaxis_title="Value")
+    
+    return fig
+
+# Run the Dash app
+if __name__ == "__main__":
+    app.run_server(debug=True)
