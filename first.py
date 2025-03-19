@@ -3,7 +3,7 @@ import random
 import time
 
 baud_rate = 9600
-port = 'COM11'  # Change this to your port
+port = 'COM6'  # Change this to your port
 
 # Initialize serial communication
 ser = serial.Serial(port, baud_rate, timeout=5)
