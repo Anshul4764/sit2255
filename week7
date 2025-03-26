@@ -1,0 +1,116 @@
+# make CSV file///////////////////////////////////////////////////////////////////////////////////////////////
+import serial
+import csv
+import time
+
+# Set up the serial connection (check the correct port for your setup)
+ser = serial.Serial('COM6', 9600, timeout=1)
+time.sleep(2)  # Wait for connection to stabilize
+
+# Open a CSV file to save data
+with open('dht22_data.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(['Temperature', 'Humidity'])  # Write headers
+
+    print("Collecting data... Press Ctrl+C to stop.")
+
+    try:
+        while True:
+            line = ser.readline().decode('utf-8').strip()
+            if line:
+                print(line)
+                data = line.split(',')
+                if len(data) == 2:
+                    writer.writerow([float(data[0]), float(data[1])])
+    
+    except KeyboardInterrupt:
+        print("Data collection stopped.")
+
+ser.close()
+
+
+
+
+
+//////////////////To make linear regression without filtering//////////////////////////////////////////////////////////////////////////////////////////////////
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+# Load data
+data = pd.read_csv('dht22_data.csv')
+X = data['Temperature'].values.reshape(-1, 1)
+y = data['Humidity'].values
+
+# Train Linear Regression model
+model = LinearRegression()
+model.fit(X, y)
+
+# Generate test temperature values
+min_temp = min(X)
+max_temp = max(X)
+temp_test = np.linspace(min_temp, max_temp, 100).reshape(-1, 1)
+
+# Predict humidity values
+humidity_pred = model.predict(temp_test)
+
+# Plot original data
+plt.scatter(X, y, color='blue', label='Original Data')
+plt.plot(temp_test, humidity_pred, color='red', linewidth=2, label='Linear Regression Trendline')
+plt.xlabel('Temperature (°C)')
+plt.ylabel('Humidity (%)')
+plt.title('Temperature vs Humidity Regression')
+plt.legend()
+plt.show()
+
+
+
+
+# /////////////////To make linear regression with filtering/////////////////////////////////////////////////////////////////////////////////////////////////////////
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+# Load data
+data = pd.read_csv('dht22_data.csv')
+X = data['Temperature'].values.reshape(-1, 1)
+y = data['Humidity'].values
+
+# Train original Linear Regression model
+original_model = LinearRegression()
+original_model.fit(X, y)
+
+# Generate original test temperature values
+min_temp = min(X)
+max_temp = max(X)
+temp_test = np.linspace(min_temp, max_temp, 100).reshape(-1, 1)
+
+# Predict humidity values for original data
+humidity_pred_original = original_model.predict(temp_test)
+
+# Detect and remove outliers (temperature outside 5th-95th percentile)
+lower_bound = np.percentile(X, 5)
+upper_bound = np.percentile(X, 95)
+filtered_data = data[(data['Temperature'] >= lower_bound) & (data['Temperature'] <= upper_bound)]
+
+# Re-train Linear Regression model with filtered data
+X_filtered = filtered_data['Temperature'].values.reshape(-1, 1)
+y_filtered = filtered_data['Humidity'].values
+filtered_model = LinearRegression()
+filtered_model.fit(X_filtered, y_filtered)
+
+# Predict humidity values for filtered data
+humidity_pred_filtered = filtered_model.predict(temp_test)
+
+# Plot original and filtered data with trendlines
+plt.scatter(X, y, color='blue', label='Original Data')
+plt.plot(temp_test, humidity_pred_original, color='red', linewidth=2, label='Original Trendline')
+plt.scatter(X_filtered, y_filtered, color='orange', label='Filtered Data')
+plt.plot(temp_test, humidity_pred_filtered, color='green', linewidth=2, label='Filtered Trendline')
+plt.xlabel('Temperature (°C)')
+plt.ylabel('Humidity (%)')
+plt.title('Temperature vs Humidity: Original vs Filtered')
+plt.legend()
+plt.show()
