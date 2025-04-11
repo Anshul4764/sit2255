@@ -1,0 +1,121 @@
+from arduino_iot_cloud import ArduinoCloudClient
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.graph_objs as go
+from collections import deque
+import threading
+from datetime import datetime
+import os
+
+# === Arduino IoT Cloud Configuration ===
+DEVICE_ID = "08d2d26d-2c01-4a6b-b2f3-2a88d1b475bc"
+USERNAME = "08d2d26d-2c01-4a6b-b2f3-2a88d1b475bc"
+PASSWORD = "1KMdNyGAzAL!!?8IzK5ssHjp6"
+
+# === Data Buffers ===
+BUFFER_SIZE = 1000
+data_lock = threading.Lock()
+timestamps = deque(maxlen=BUFFER_SIZE)
+x_data = deque(maxlen=BUFFER_SIZE)
+y_data = deque(maxlen=BUFFER_SIZE)
+z_data = deque(maxlen=BUFFER_SIZE)
+
+# === CSV File Setup ===
+for axis in ['x', 'y', 'z']:
+    filename = f'accel_{axis}.csv'
+    if not os.path.exists(filename):
+        with open(filename, 'w') as f:
+            f.write("timestamp,value\n")
+
+# === Dash Layout ===
+app = dash.Dash(__name__)
+app.title = "Arduino 8.2C Sensor Dashboard"
+
+app.layout = html.Div([
+    html.H2("Arduino IoT Accelerometer - Axis Viewer (8.2C)", style={'textAlign': 'center'}),
+    dcc.Dropdown(
+        id='axis-selector',
+        options=[
+            {'label': 'X Axis', 'value': 'x'},
+            {'label': 'Y Axis', 'value': 'y'},
+            {'label': 'Z Axis', 'value': 'z'}
+        ],
+        value='x',
+        clearable=False,
+        style={'width': '50%', 'margin': 'auto'}
+    ),
+    dcc.Graph(id='live-graph'),
+    dcc.Interval(id='graph-update', interval=1000, n_intervals=0)
+])
+
+# === Dash Callback ===
+@app.callback(
+    Output('live-graph', 'figure'),
+    [Input('graph-update', 'n_intervals'),
+     Input('axis-selector', 'value')]
+)
+def update_graph(n, selected_axis):
+    with data_lock:
+        ts = list(timestamps)
+        if selected_axis == 'x':
+            values = list(x_data)
+            color = 'red'
+        elif selected_axis == 'y':
+            values = list(y_data)
+            color = 'green'
+        else:
+            values = list(z_data)
+            color = 'blue'
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=ts, y=values, name=f"{selected_axis.upper()} Axis", line=dict(color=color)))
+    fig.update_layout(
+        title=f'Real-Time {selected_axis.upper()}-Axis Accelerometer Data',
+        xaxis_title='Timestamp',
+        yaxis_title='Acceleration (g)',
+        template='plotly_white'
+    )
+    return fig
+
+# === Arduino Cloud Write Callbacks ===
+def on_py_x(client, value):
+    timestamp = datetime.now()
+    with data_lock:
+        x_data.append(value)
+        timestamps.append(timestamp)
+    with open('acel_x.csv', 'a') as f:
+        f.write(f"{timestamp.isoformat()},{value}\n")
+
+def on_py_y(client, value):
+    timestamp = datetime.now()
+    with data_lock:
+        y_data.append(value)
+    with open('acel_y.csv', 'a') as f:
+        f.write(f"{timestamp.isoformat()},{value}\n")
+
+def on_py_z(client, value):
+    timestamp = datetime.now()
+    with data_lock:
+        z_data.append(value)
+    with open('acel_z.csv', 'a') as f:
+        f.write(f"{timestamp.isoformat()},{value}\n")
+
+# === Connect to Arduino IoT Cloud ===
+client = ArduinoCloudClient(
+    device_id=DEVICE_ID,
+    username=USERNAME,
+    password=PASSWORD
+)
+
+client.register("py_x", on_write=on_py_x)
+client.register("py_y", on_write=on_py_y)
+client.register("py_z", on_write=on_py_z)
+
+cloud_thread = threading.Thread(target=client.start)
+cloud_thread.daemon = True
+cloud_thread.start()
+
+# === Run Server ===
+if __name__ == '__main__':
+    app.run_server(debug=False)
