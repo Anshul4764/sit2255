@@ -1,0 +1,68 @@
+import serial
+import json
+import time
+import firebase_admin
+from firebase_admin import credentials, db
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Initialize Firebase
+cred = credentials.Certificate("defendeeer-687b5-firebase-adminsdk-fbsvc-0ed7bc23f7.json")
+firebase_admin.initialize_app(cred, {"databaseURL": "https://defendeeer-687b5-default-rtdb.firebaseio.com/"})
+
+
+ref = db.reference("/gyroscope_data")  # Firebase path
+
+# Connect to Arduino via Serial (Adjust COM port for Windows)
+ser = serial.Serial("COM6", 115200, timeout=1)  # Replace with correct COM port
+time.sleep(2)  # Allow connection time
+
+# Collect data from Arduino
+print("Collecting data from Arduino...")
+
+try:
+    while True:
+        line = ser.readline().decode("utf-8").strip()
+        if line:
+            try:
+                data = json.loads(line)
+                print("Received:", data)
+                ref.push(data)  # Upload to Firebase
+            except json.JSONDecodeError:
+                print("Invalid JSON received:", line)
+
+except KeyboardInterrupt:
+    print("\nData collection stopped.")
+
+ser.close()
+
+# Retrieve data from Firebase
+print("Retrieving data from Firebase...")
+data = ref.get()
+
+# Convert to DataFrame
+df = pd.DataFrame(data.values())
+df.to_csv("gyroscope_data.csv", index=False)
+print("Data saved to gyroscope_data.csv")
+
+# Plot data
+plt.figure(figsize=(12, 6), dpi=150)  # Higher DPI for better visibility
+
+
+plt.subplot(2, 1, 1)
+plt.plot(df["timestamp"], df["x"], label="X-axis", color="r")
+plt.plot(df["timestamp"], df["y"], label="Y-axis", color="g")
+plt.plot(df["timestamp"], df["z"], label="Z-axis", color="b")
+plt.xlabel("Timestamp")
+plt.ylabel("Gyroscope Readings")
+plt.legend()
+plt.title("Gyroscope Data (X, Y, Z)")
+
+plt.subplot(2, 1, 2)
+plt.plot(df["timestamp"], df["x"], label="X-axis", color="r")
+plt.xlabel("Timestamp")
+plt.ylabel("X-axis Gyro Data")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
